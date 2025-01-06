@@ -12,7 +12,8 @@ from .d4rl import load_environment
 
 def compose(*fns):
 
-    def _fn(x):
+    def _fn(x): # nn.Sequential types
+        
         for fn in fns:
             x = fn(x)
         return x

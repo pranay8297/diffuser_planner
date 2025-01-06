@@ -16,23 +16,31 @@ ValueBatch = namedtuple('ValueBatch', 'trajectories conditions values')
 class SequenceDataset(torch.utils.data.Dataset):
 
     def __init__(self, env='hopper-medium-replay', horizon=64,
+        
         normalizer='LimitsNormalizer', preprocess_fns=[], max_path_length=1000,
         max_n_episodes=10000, termination_penalty=0, use_padding=True, seed=None):
-        self.preprocess_fn = get_preprocess_fn(preprocess_fns, env)
-        self.env = env = load_environment(env)
-        self.env.seed(seed)
+
+        self.preprocess_fn = get_preprocess_fn(preprocess_fns, env) # gets sequential run of input through all the functions
+
+        self.env = env = load_environment(env) # gets the gym environment
+
+        self.env.seed(seed) # Sets seed 
+
+        # Default Argument Settings
         self.horizon = horizon
         self.max_path_length = max_path_length
         self.use_padding = use_padding
-        itr = sequence_dataset(env, self.preprocess_fn)
 
-        fields = ReplayBuffer(max_n_episodes, max_path_length, termination_penalty)
+        itr = sequence_dataset(env, self.preprocess_fn) # generator - that gives a sequence of a succesful trajectory
+        fields = ReplayBuffer(max_n_episodes, max_path_length, termination_penalty) # Why do we require this?
+
         for i, episode in enumerate(itr):
             fields.add_path(episode)
+        
         fields.finalize()
 
-        self.normalizer = DatasetNormalizer(fields, normalizer, path_lengths=fields['path_lengths'])
-        self.indices = self.make_indices(fields.path_lengths, horizon)
+        self.normalizer = DatasetNormalizer(fields, normalizer, path_lengths=fields['path_lengths']) # basic normalization
+        self.indices = self.make_indices(fields.path_lengths, horizon) # 
 
         self.observation_dim = fields.observations.shape[-1]
         self.action_dim = fields.actions.shape[-1]
@@ -46,20 +54,25 @@ class SequenceDataset(torch.utils.data.Dataset):
         # print(f'[ datasets/mujoco ] Dataset fields: {shapes}')
 
     def normalize(self, keys=['observations', 'actions']):
+        
         '''
             normalize fields that will be predicted by the diffusion model
         '''
+        
         for key in keys:
             array = self.fields[key].reshape(self.n_episodes*self.max_path_length, -1)
             normed = self.normalizer(array, key)
             self.fields[f'normed_{key}'] = normed.reshape(self.n_episodes, self.max_path_length, -1)
 
     def make_indices(self, path_lengths, horizon):
+        
         '''
             makes indices for sampling from dataset;
             each index maps to a datapoint
         '''
+        
         indices = []
+
         for i, path_length in enumerate(path_lengths):
             max_start = min(path_length - 1, self.max_path_length - horizon)
             if not self.use_padding:
@@ -67,13 +80,16 @@ class SequenceDataset(torch.utils.data.Dataset):
             for start in range(max_start):
                 end = start + horizon
                 indices.append((i, start, end))
+        
         indices = np.array(indices)
         return indices
 
     def get_conditions(self, observations):
+        
         '''
             condition on current observation for planning
         '''
+        
         return {0: observations[0]}
 
     def __len__(self):
@@ -88,6 +104,9 @@ class SequenceDataset(torch.utils.data.Dataset):
         conditions = self.get_conditions(observations)
         trajectories = np.concatenate([actions, observations], axis=-1)
         batch = Batch(trajectories, conditions)
+
+        #conditions are nothing but conditional diffusion models - Lets see
+
         return batch
 
 

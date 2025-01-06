@@ -34,6 +34,7 @@ def load_environment(name):
         return name
     with suppress_output():
         wrapped_env = gym.make(name)
+
     env = wrapped_env.unwrapped
     env.max_episode_steps = wrapped_env._max_episode_steps
     env.name = name
@@ -67,20 +68,25 @@ def sequence_dataset(env, preprocess_fn):
             rewards
             terminals
     """
-    dataset = get_dataset(env)
+    dataset = get_dataset(env) # gets the dataset - I think it has runs for Offline RL - TODO: Verify - Yes
+    # And also, its a collection of sequential succesful trajectories
+    
     dataset = preprocess_fn(dataset)
 
-    N = dataset['rewards'].shape[0]
+    N = dataset['rewards'].shape[0] 
     data_ = collections.defaultdict(list)
 
     # The newer version of the dataset adds an explicit
     # timeouts field. Keep old method for backwards compatability.
-    use_timeouts = 'timeouts' in dataset
 
+    use_timeouts = 'timeouts' in dataset
     episode_step = 0
+
     for i in range(N):
-        done_bool = bool(dataset['terminals'][i])
-        if use_timeouts:
+
+        done_bool = bool(dataset['terminals'][i]) # Episode termination flag
+        
+        if use_timeouts: # we have timeouts, so this condition will pass
             final_timestep = dataset['timeouts'][i]
         else:
             final_timestep = (episode_step == env._max_episode_steps - 1)
@@ -92,15 +98,17 @@ def sequence_dataset(env, preprocess_fn):
         if done_bool or final_timestep:
             episode_step = 0
             episode_data = {}
+
             for k in data_:
                 episode_data[k] = np.array(data_[k])
+
             if 'maze2d' in env.name:
                 episode_data = process_maze2d_episode(episode_data)
+
             yield episode_data
             data_ = collections.defaultdict(list)
 
         episode_step += 1
-
 
 #-----------------------------------------------------------------------------#
 #-------------------------------- maze2d fixes -------------------------------#

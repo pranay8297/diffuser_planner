@@ -9,7 +9,7 @@ class ReplayBuffer:
 
     def __init__(self, max_n_episodes, max_path_length, termination_penalty):
         self._dict = {
-            'path_lengths': np.zeros(max_n_episodes, dtype=np.int),
+            'path_lengths': np.zeros(max_n_episodes, dtype=int),
         }
         self._count = 0
         self.max_n_episodes = max_n_episodes
@@ -54,14 +54,17 @@ class ReplayBuffer:
         return {k: v for k, v in self._dict.items()
                 if k != 'path_lengths'}.items()
 
-    def _allocate(self, key, array):
+    def _allocate(self, key, array): # creating a big array of 0s for each of states, so that we can store them here
+        
         assert key not in self._dict
         dim = array.shape[-1]
         shape = (self.max_n_episodes, self.max_path_length, dim)
         self._dict[key] = np.zeros(shape, dtype=np.float32)
+
         # print(f'[ utils/mujoco ] Allocated {key} with size {shape}')
 
-    def add_path(self, path):
+    def add_path(self, path): # path is ideally an episode
+
         path_length = len(path['observations'])
         assert path_length <= self.max_path_length
 
@@ -70,13 +73,16 @@ class ReplayBuffer:
 
         ## add tracked keys in path
         for key in self.keys:
-            array = atleast_2d(path[key])
+            
+            array = atleast_2d(path[key]) # make it 2 dimensional
+
             if key not in self._dict: self._allocate(key, array)
-            self._dict[key][self._count, :path_length] = array
+            self._dict[key][self._count, :path_length] = array # setting that - Creating a one huge dict of np arrays of shape N
 
         ## penalize early termination
         if path['terminals'].any() and self.termination_penalty is not None:
             assert not path['timeouts'].any(), 'Penalized a timeout episode for early termination'
+
             self._dict['rewards'][self._count, path_length - 1] += self.termination_penalty
 
         ## record path length
