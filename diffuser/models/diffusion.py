@@ -47,11 +47,6 @@ def ddim_sample_fn(model, x, cond, cts, pts, **sample_kwargs):
     return xt_prev, torch.zeros(len(x), device=x.device)
 
 
-## TODO: DDIM
-## 2 things to change
-## Update the Noise Schedule to linear increase in std dev
-## Change the sampling part from DDPM to DDIM, include variable stochasticity - Have a schedule for stochasticity
-
 def sort_by_values(x, values):
     inds = torch.argsort(values, descending=True)
     x = x[inds]
