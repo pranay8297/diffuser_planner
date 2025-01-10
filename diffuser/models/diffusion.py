@@ -12,14 +12,12 @@ from .helpers import (
     Losses,
 )
 
-
 Sample = namedtuple('Sample', 'trajectories values chains')
 
-
 @torch.no_grad()
-def default_sample_fn(model, x, cond, t):
-    model_mean, _, model_log_variance = model.p_mean_variance(x=x, cond=cond, t=t)
-    model_std = torch.exp(0.5 * model_log_variance)
+def default_sample_fn(model, x, cond, t): # calculating xt_1
+    model_mean, _, model_log_variance = model.p_mean_variance(x=x, cond=cond, t=t) 
+    model_std = torch.exp(0.5 * model_log_variance) # This can also be just sigma which is sqrt(beta_t) - yeah both works, its upto you
 
     # no noise when t == 0
     noise = torch.randn_like(x)
@@ -28,6 +26,29 @@ def default_sample_fn(model, x, cond, t):
     values = torch.zeros(len(x), device=x.device)
     return model_mean + model_std * noise, values
 
+@torch.no_grad()
+def ddim_sample_fn(model, x, cond, cts, pts, **sample_kwargs):
+
+    gamma = 0 if 'gamma' not in sample_kwargs else sample_kwargs['gamma']
+
+    noise_hat = self.model(x, cond, t)
+    noise_new = torch.randn_like(x)
+
+    x_recon = model.predict_start_from_noise(x, t=t, noise = noise_hat) # x0_hat
+
+    # sqrt(alpha_bar_prev) * x_recon + (1 - alpha_bar_prev - sigma**2) * noise_pred + sigma * noise_new
+    xt_prev = (
+            extract(self.sqrt_alphas_cumprod, pts, x_recon.shape) * x_start +
+            torch.sqrt(extract(self.alphas_cumprod, pts, x_recon.shape) - gamma**2) * noise_hat + 
+            gamma * new_noise
+        )
+    return xt_prev, torch.zeros(len(x), device=x.device)
+
+
+## TODO: DDIM
+## 2 things to change
+## Update the Noise Schedule to linear increase in std dev
+## Change the sampling part from DDPM to DDIM, include variable stochasticity - Have a schedule for stochasticity
 
 def sort_by_values(x, values):
     inds = torch.argsort(values, descending=True)
@@ -87,8 +108,8 @@ class GaussianDiffusion(nn.Module):
             (1. - alphas_cumprod_prev) * np.sqrt(alphas) / (1. - alphas_cumprod))
 
         ## get loss coefficients and initialize objective
-        loss_weights = self.get_loss_weights(action_weight, loss_discount, loss_weights)
-        self.loss_fn = Losses[loss_type](loss_weights, self.action_dim)
+        loss_weights = self.get_loss_weights(action_weight, loss_discount, loss_weights) 
+        self.loss_fn = Losses[loss_type](loss_weights, self.action_dim) # TODO: gotta pass an argument for l2 loss instead of l1
 
     def get_loss_weights(self, action_weight, discount, weights_dict):
         '''
@@ -144,7 +165,7 @@ class GaussianDiffusion(nn.Module):
         return posterior_mean, posterior_variance, posterior_log_variance_clipped
 
     def p_mean_variance(self, x, cond, t):
-        x_recon = self.predict_start_from_noise(x, t=t, noise=self.model(x, cond, t))
+        x_recon = self.predict_start_from_noise(x, t=t, noise=self.model(x, cond, t)) # x_0 calculated 
 
         if self.clip_denoised:
             x_recon.clamp_(-1., 1.)
@@ -152,27 +173,53 @@ class GaussianDiffusion(nn.Module):
             assert RuntimeError()
 
         model_mean, posterior_variance, posterior_log_variance = self.q_posterior(
-                x_start=x_recon, x_t=x, t=t)
+                            x_start=x_recon, x_t=x, t=t)
         return model_mean, posterior_variance, posterior_log_variance
 
     @torch.no_grad()
-    def p_sample_loop(self, shape, cond, verbose=True, return_chain=False, sample_fn=default_sample_fn, **sample_kwargs):
+    def p_sample_loop(self, shape, cond, verbose=True, return_chain=False, sample_fn=default_sample_fn, **sample_kwargs): # will pass ddim guided sample when we call it with ddim - done
         device = self.betas.device
 
-        batch_size = shape[0]
-        x = torch.randn(shape, device=device)
-        x = apply_conditioning(x, cond, self.action_dim)
+        batch_size = shape[0] 
+        x = torch.randn(shape, device=device) # x_t -> Pure noise
+        x = apply_conditioning(x, cond, self.action_dim) # In painting task
 
         chain = [x] if return_chain else None
 
         progress = utils.Progress(self.n_timesteps) if verbose else utils.Silent()
-        for i in reversed(range(0, self.n_timesteps)):
-            t = make_timesteps(batch_size, i, device)
-            x, values = sample_fn(self, x, cond, t, **sample_kwargs)
-            x = apply_conditioning(x, cond, self.action_dim)
+        # breakpoint()
+        if 'method' in sample_kwargs and sample_kwargs['method'] == 'ddim':
+            n_steps = sample_kwargs['n_sampling_steps'] if 'n_sampling_steps' in sample_kwargs else 10 # hardcoding it to 10, if not provided
 
-            progress.update({'t': i, 'vmin': values.min().item(), 'vmax': values.max().item()})
-            if return_chain: chain.append(x)
+            skips = self.n_timesteps//n_steps
+            
+            timesteps = list(reversed(range(0, self.n_timesteps, skips)))
+
+            # n_step_guided_p_sample_ddim(model, x, cond, cts, pts, guide, scale=0.001, t_stopgrad=0, n_guide_steps=1, scale_grad_by_std=True, gamma = 0)
+            # ddim_sample_fn(model, x, cond, cts, pts, **sample_kwargs):
+            if timesteps[0] != self.n_timesteps-1: 
+                timesteps = [self.n_timesteps-1] + timesteps # just adding the last time step - to start from that position
+
+            for i in range(len(timesteps)-1): # 0 to n_steps-1 -> 0 to n-2
+                cts = make_timesteps(batch_size, timesteps[i], device)
+                pts = make_timesteps(batch_size, timesteps[i+1], device)
+
+                x, values = sample_fn(self, x, cond, cts, pts, **sample_kwargs) # make sure that the sample function we pass here is adjusted according to conditional and guided conditional
+
+                x = apply_conditioning(x, cond, self.action_dim)
+
+                progress.update({'t': i, 'vmin': values.min().item(), 'vmax': values.max().item()})
+                if return_chain: chain.append(x)
+
+        else:
+
+            for i in reversed(range(0, self.n_timesteps)): # just need to update these timesteps tensor 
+                t = make_timesteps(batch_size, i, device) # timestep tensor
+                x, values = sample_fn(self, x, cond, t, **sample_kwargs)  
+                x = apply_conditioning(x, cond, self.action_dim)
+
+                progress.update({'t': i, 'vmin': values.min().item(), 'vmax': values.max().item()})
+                if return_chain: chain.append(x)
 
         progress.stamp()
 
@@ -192,11 +239,11 @@ class GaussianDiffusion(nn.Module):
 
         return self.p_sample_loop(shape, cond, **sample_kwargs)
 
-    #------------------------------------------ training ------------------------------------------#
+    #------------------------------------------ training ------------------------------------------# Just done connecting the parallel lines!
 
     def q_sample(self, x_start, t, noise=None):
         if noise is None:
-            noise = torch.randn_like(x_start)
+            noise = torch.randn_like(x_start) 
 
         sample = (
             extract(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start +
@@ -206,27 +253,29 @@ class GaussianDiffusion(nn.Module):
         return sample
 
     def p_losses(self, x_start, cond, t):
-        noise = torch.randn_like(x_start)
+        noise = torch.randn_like(x_start) # Noise to add
 
-        x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise)
+        x_noisy = self.q_sample(x_start=x_start, t=t, noise=noise) # calculating x_t - q(x_t/x_0) - sqrt(alpha_bar_t) * x_0 + sqrt(1 - alpha_bar_t) * Gaussian Noise
         x_noisy = apply_conditioning(x_noisy, cond, self.action_dim)
 
-        x_recon = self.model(x_noisy, cond, t)
-        x_recon = apply_conditioning(x_recon, cond, self.action_dim)
+        x_recon = self.model(x_noisy, cond, t) # No need to conditioning in the model, instead we are training it like inpainting task directly - Saving some computation!
+        x_recon = apply_conditioning(x_recon, cond, self.action_dim) # Just replacing the states with desired states we already have - awesome 
 
         assert noise.shape == x_recon.shape
 
-        if self.predict_epsilon:
-            loss, info = self.loss_fn(x_recon, noise)
+        if self.predict_epsilon: 
+            loss, info = self.loss_fn(x_recon, noise) # this is just a weighted loss function - it weights the loss based on the depth of trajctory - TODO: we can remove weighting and test once - lets see
         else:
             loss, info = self.loss_fn(x_recon, x_start)
 
         return loss, info
 
-    def loss(self, x, *args):
+    def loss(self, x, *args): # this is the training function
+
         batch_size = len(x)
-        t = torch.randint(0, self.n_timesteps, (batch_size,), device=x.device).long()
-        return self.p_losses(x, *args, t)
+        t = torch.randint(0, self.n_timesteps, (batch_size,), device=x.device).long() # creating timesteps for the batch
+
+        return self.p_losses(x, *args, t) # p_losses is where x_t calculation, epsilon_hat prediction, loss calculation and weighting, mean and backward happens
 
     def forward(self, cond, *args, **kwargs):
         return self.conditional_sample(cond, *args, **kwargs)
@@ -247,4 +296,3 @@ class ValueDiffusion(GaussianDiffusion):
 
     def forward(self, x, cond, t):
         return self.model(x, cond, t)
-

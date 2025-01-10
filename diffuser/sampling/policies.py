@@ -9,20 +9,25 @@ from diffuser.datasets.preprocessing import get_policy_preprocess_fn
 
 Trajectories = namedtuple('Trajectories', 'actions observations values')
 
+device = torch.device('cpu')
+if torch.cuda.is_available():
+    device = torch.device('cuda')
+elif torch.backends.mps.is_available():
+    device = torch.device('mps')
 
 class GuidedPolicy:
 
     def __init__(self, guide, diffusion_model, normalizer, preprocess_fns, **sample_kwargs):
-        self.guide = guide
-        self.diffusion_model = diffusion_model
-        self.normalizer = normalizer
-        self.action_dim = diffusion_model.action_dim
-        self.preprocess_fn = get_policy_preprocess_fn(preprocess_fns)
-        self.sample_kwargs = sample_kwargs
+        self.guide = guide # value function
+        self.diffusion_model = diffusion_model # diffusion model
+        self.normalizer = normalizer # Data Normalization
+        self.action_dim = diffusion_model.action_dim # Just action dimension size
+        self.preprocess_fn = get_policy_preprocess_fn(preprocess_fns) 
+        self.sample_kwargs = sample_kwargs 
 
     def __call__(self, conditions, batch_size=1, verbose=True):
-        conditions = {k: self.preprocess_fn(v) for k, v in conditions.items()}
-        conditions = self._format_conditions(conditions, batch_size)
+        conditions = {k: self.preprocess_fn(v) for k, v in conditions.items()} # we have conditions to start with
+        conditions = self._format_conditions(conditions, batch_size) # jsut some preprocessing of conditions
 
         ## run reverse diffusion process
         samples = self.diffusion_model(conditions, guide=self.guide, verbose=verbose, **self.sample_kwargs)
@@ -52,7 +57,7 @@ class GuidedPolicy:
             conditions,
             'observations',
         )
-        conditions = utils.to_torch(conditions, dtype=torch.float32, device='cuda:0')
+        conditions = utils.to_torch(conditions, dtype=torch.float32, device=device)
         conditions = utils.apply_dict(
             einops.repeat,
             conditions,

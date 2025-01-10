@@ -14,7 +14,11 @@ class Parser(utils.Parser):
 
 args = Parser().parse_args('plan')
 
+sampling_fn = sampling.n_step_guided_p_sample
 
+if args.method == 'ddim':
+    # we need 2 things - one is ddim flag and other is number of sampling steps
+    sampling_fn = sampling.n_step_guided_p_sample_ddim
 #-----------------------------------------------------------------------------#
 #---------------------------------- loading ----------------------------------#
 #-----------------------------------------------------------------------------#
@@ -24,6 +28,9 @@ diffusion_experiment = utils.load_diffusion(
     args.loadbase, args.dataset, args.diffusion_loadpath,
     epoch=args.diffusion_epoch, seed=args.seed,
 )
+
+args.value_loadpath = 'values/defaults_H4_T20_d0.99'
+
 value_experiment = utils.load_diffusion(
     args.loadbase, args.dataset, args.value_loadpath,
     epoch=args.value_epoch, seed=args.seed,
@@ -58,11 +65,13 @@ policy_config = utils.Config(
     normalizer=dataset.normalizer,
     preprocess_fns=args.preprocess_fns,
     ## sampling kwargs
-    sample_fn=sampling.n_step_guided_p_sample,
+    sample_fn=sampling_fn,
     n_guide_steps=args.n_guide_steps,
     t_stopgrad=args.t_stopgrad,
     scale_grad_by_std=args.scale_grad_by_std,
+    n_sampling_steps = args.n_sampling_steps,
     verbose=False,
+    method=args.method,
 )
 
 logger = logger_config()

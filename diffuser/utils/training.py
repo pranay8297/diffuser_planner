@@ -9,6 +9,12 @@ from .arrays import batch_to_device, to_np, to_device, apply_dict
 from .timer import Timer
 from .cloud import sync_logs
 
+DEVICE = torch.device('cpu')
+if torch.cuda.is_available():
+    DEVICE = torch.device('cuda')
+elif torch.backends.mps.is_available():
+    DEVICE = torch.device('mps')
+
 def cycle(dl):
     while True:
         for data in dl:
@@ -39,7 +45,7 @@ class Trainer(object):
         dataset,
         renderer,
         ema_decay=0.995,
-        train_batch_size=32,
+        train_batch_size=64,
         train_lr=2e-5,
         gradient_accumulate_every=2,
         step_start_ema=2000,
@@ -71,10 +77,10 @@ class Trainer(object):
 
         self.dataset = dataset
         self.dataloader = cycle(torch.utils.data.DataLoader(
-            self.dataset, batch_size=train_batch_size, num_workers=1, shuffle=True, pin_memory=True
+            self.dataset, batch_size=train_batch_size, shuffle=True, pin_memory=True
         ))
         self.dataloader_vis = cycle(torch.utils.data.DataLoader(
-            self.dataset, batch_size=1, num_workers=0, shuffle=True, pin_memory=True
+            self.dataset, batch_size=1, shuffle=True, pin_memory=True
         ))
         self.renderer = renderer
         self.optimizer = torch.optim.Adam(diffusion_model.parameters(), lr=train_lr)
@@ -128,7 +134,7 @@ class Trainer(object):
             if self.step == 0 and self.sample_freq:
                 self.render_reference(self.n_reference)
 
-            if self.sample_freq and self.step % self.sample_freq == 0:
+            # if self.sample_freq and self.step % self.sample_freq == 0:
                 self.render_samples()
 
             self.step += 1
@@ -164,7 +170,8 @@ class Trainer(object):
     #--------------------------------- rendering ---------------------------------#
     #-----------------------------------------------------------------------------#
 
-    def render_reference(self, batch_size=10):
+    def render_reference(self, batch_size=10): # this will save actual traj to an image
+        
         '''
             renders training points
         '''
@@ -187,7 +194,7 @@ class Trainer(object):
         savepath = os.path.join(self.logdir, f'_sample-reference.png')
         self.renderer.composite(savepath, observations)
 
-    def render_samples(self, batch_size=2, n_samples=2):
+    def render_samples(self, batch_size=2, n_samples=2): # this will save a sampled traj to an image
         '''
             renders samples from (ema) diffusion model
         '''
@@ -195,7 +202,7 @@ class Trainer(object):
 
             ## get a single datapoint
             batch = self.dataloader_vis.__next__()
-            conditions = to_device(batch.conditions, 'cuda:0')
+            conditions = to_device(batch.conditions, DEVICE)
 
             ## repeat each item in conditions `n_samples` times
             conditions = apply_dict(
@@ -224,4 +231,5 @@ class Trainer(object):
             observations = self.dataset.normalizer.unnormalize(normed_observations, 'observations')
 
             savepath = os.path.join(self.logdir, f'sample-{self.step}-{i}.png')
-            self.renderer.composite(savepath, observations)
+            print(f"Saving Rendered Samples at : {savepath}")
+            self.renderer.composite(savepath, observations) 
