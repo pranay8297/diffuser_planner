@@ -114,6 +114,9 @@ base = {
         'preprocess_fns': [],
         'device': 'cuda',
         'seed': None,
+        'method': 'ddpm', #change it to ddim if required
+        'n_sampling_steps': 10, # 20 timesteps is what they use for ddpm... so cutting it by 10
+        'gamma': 0.0,
 
         ## sample_kwargs
         'n_guide_steps': 2,
@@ -134,7 +137,7 @@ base = {
         'n_diffusion_steps': 20,
 
         ## value function
-        'discount': 0.997,
+        'discount': 0.99,
 
         ## loading
         'diffusion_loadpath': 'f:diffusion/defaults_H{horizon}_T{n_diffusion_steps}',

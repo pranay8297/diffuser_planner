@@ -155,13 +155,17 @@ class ValueDataset(SequenceDataset):
         return normed
 
     def __getitem__(self, idx):
-        batch = super().__getitem__(idx)
+        
+        batch = super().__getitem__(idx) # sequence data - it has trajectories, conditions
         path_ind, start, end = self.indices[idx]
         rewards = self.fields['rewards'][path_ind, start:]
         discounts = self.discounts[:len(rewards)]
         value = (discounts * rewards).sum()
+
         if self.normed:
             value = self.normalize_value(value)
+        
         value = np.array([value], dtype=np.float32)
         value_batch = ValueBatch(*batch, value)
         return value_batch
+        

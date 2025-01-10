@@ -17,7 +17,7 @@ class DatasetNormalizer:
         self.action_dim = dataset['actions'].shape[1]
 
         if type(normalizer) == str:
-            normalizer = eval(normalizer)
+            normalizer = eval(normalizer) 
 
         self.normalizers = {}
         for key, val in dataset.items():
@@ -44,7 +44,7 @@ class DatasetNormalizer:
     def get_field_normalizers(self):
         return self.normalizers
 
-def flatten(dataset, path_lengths):
+def flatten(dataset, path_lengths): 
     '''
         flattens dataset of { key: [ n_episodes x max_path_lenth x dim ] }
             to { key : [ (n_episodes * sum(path_lengths)) x dim ]}
@@ -56,7 +56,7 @@ def flatten(dataset, path_lengths):
             x[:length]
             for x, length in zip(xs, path_lengths)
         ], axis=0)
-    return flattened
+    return flattened # this is just creating a path
 
 #-----------------------------------------------------------------------------#
 #------------------------------- @TODO: remove? ------------------------------#
