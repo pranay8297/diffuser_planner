@@ -31,17 +31,19 @@ def ddim_sample_fn(model, x, cond, cts, pts, **sample_kwargs):
 
     gamma = 0 if 'gamma' not in sample_kwargs else sample_kwargs['gamma']
 
-    noise_hat = self.model(x, cond, t)
+    gamma = 0 # presently hard coding it to 0, TODO: implement gamma noise addtion
+
+    noise_hat = model.model(x, cond, cts) # call the temporal UNET model
     noise_new = torch.randn_like(x)
 
-    x_recon = model.predict_start_from_noise(x, t=t, noise = noise_hat) # x0_hat
+    x_recon = model.predict_start_from_noise(x, t = cts, noise = noise_hat) # x0_hat
 
     # sqrt(alpha_bar_prev) * x_recon + (1 - alpha_bar_prev - sigma**2) * noise_pred + sigma * noise_new
     xt_prev = (
-            extract(self.sqrt_alphas_cumprod, pts, x_recon.shape) * x_start +
-            torch.sqrt(extract(self.alphas_cumprod, pts, x_recon.shape) - gamma**2) * noise_hat + 
-            gamma * new_noise
+            extract(model.sqrt_alphas_cumprod, pts, x_recon.shape) * x_recon +
+            extract(model.sqrt_one_minus_alphas_cumprod, pts, x_recon.shape) * noise_hat 
         )
+
     return xt_prev, torch.zeros(len(x), device=x.device)
 
 
