@@ -8,6 +8,12 @@ from collections import namedtuple
 
 DiffusionExperiment = namedtuple('Diffusion', 'dataset renderer model diffusion ema trainer epoch')
 
+device = torch.device('cpu')
+if torch.cuda.is_available():
+    device = torch.device('cuda')
+elif torch.backends.mps.is_available():
+    device = torch.device('mps')
+
 def mkdir(savepath):
     """
         returns `True` iff `savepath` is created
@@ -33,7 +39,7 @@ def load_config(*loadpath):
     print(config)
     return config
 
-def load_diffusion(*loadpath, epoch='latest', device='cuda:0', seed=None):
+def load_diffusion(*loadpath, epoch='latest', device=device, seed=None):
     dataset_config = load_config(*loadpath, 'dataset_config.pkl')
     render_config = load_config(*loadpath, 'render_config.pkl')
     model_config = load_config(*loadpath, 'model_config.pkl')

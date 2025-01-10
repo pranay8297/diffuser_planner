@@ -12,7 +12,6 @@ class Parser(utils.Parser):
 
 args = Parser().parse_args('values')
 
-
 #-----------------------------------------------------------------------------#
 #---------------------------------- dataset ----------------------------------#
 #-----------------------------------------------------------------------------#
@@ -32,6 +31,8 @@ dataset_config = utils.Config(
     normed=args.normed,
 )
 
+
+
 render_config = utils.Config(
     args.renderer,
     savepath=(args.savepath, 'render_config.pkl'),
@@ -44,6 +45,13 @@ renderer = render_config()
 observation_dim = dataset.observation_dim
 action_dim = dataset.action_dim
 
+import torch
+device = torch.device('cpu')
+if torch.cuda.is_available():
+    device = torch.device('cuda')
+elif torch.backends.mps.is_available():
+    device = torch.device('mps')
+
 #-----------------------------------------------------------------------------#
 #------------------------------ model & trainer ------------------------------#
 #-----------------------------------------------------------------------------#
@@ -55,7 +63,7 @@ model_config = utils.Config(
     transition_dim=observation_dim + action_dim,
     cond_dim=observation_dim,
     dim_mults=args.dim_mults,
-    device=args.device,
+    device=device,
 )
 
 diffusion_config = utils.Config(
@@ -66,7 +74,7 @@ diffusion_config = utils.Config(
     action_dim=action_dim,
     n_timesteps=args.n_diffusion_steps,
     loss_type=args.loss_type,
-    device=args.device,
+    device=device,
 )
 
 trainer_config = utils.Config(
@@ -111,7 +119,7 @@ print('✓')
 #-----------------------------------------------------------------------------#
 
 n_epochs = int(args.n_train_steps // args.n_steps_per_epoch)
-
+n_epochs = 3
 for i in range(n_epochs):
     print(f'Epoch {i} / {n_epochs} | {args.savepath}')
     trainer.train(n_train_steps=args.n_steps_per_epoch)

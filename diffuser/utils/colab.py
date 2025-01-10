@@ -16,8 +16,14 @@ from .serialization import mkdir
 from .arrays import to_torch, to_np
 from .video import save_video
 
+import torch
+device = torch.device('cpu')
+if torch.cuda.is_available():
+    device = torch.device('cuda')
+elif torch.backends.mps.is_available():
+    device = torch.device('mps')
 
-def run_diffusion(model, dataset, obs, n_samples=1, device='cuda:0', **diffusion_kwargs):
+def run_diffusion(model, dataset, obs, n_samples=1, device=device, **diffusion_kwargs):
   ## normalize observation for model
   obs = dataset.normalizer.normalize(obs, 'observations')
 

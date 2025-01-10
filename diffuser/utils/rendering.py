@@ -152,6 +152,8 @@ class MuJoCoRenderer:
         return composite
 
     def composite(self, savepath, paths, dim=(1024, 256), **kwargs):
+        
+        # Just save an image
 
         render_kwargs = {
             'trackbodyid': 2,

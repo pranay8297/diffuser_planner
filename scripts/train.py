@@ -1,6 +1,5 @@
 import diffuser.utils as utils
 
-
 #-----------------------------------------------------------------------------#
 #----------------------------------- setup -----------------------------------#
 #-----------------------------------------------------------------------------#
@@ -10,12 +9,11 @@ class Parser(utils.Parser):
     config: str = 'config.locomotion'
 
 args = Parser().parse_args('diffusion')
-
+pps = args
 
 #-----------------------------------------------------------------------------#
 #---------------------------------- dataset ----------------------------------#
 #-----------------------------------------------------------------------------#
-
 dataset_config = utils.Config(
     args.loader,
     savepath=(args.savepath, 'dataset_config.pkl'),
@@ -33,16 +31,24 @@ render_config = utils.Config(
     env=args.dataset,
 )
 
+# args.horizon = 8
+
 dataset = dataset_config()
 renderer = render_config()
 
 observation_dim = dataset.observation_dim
 action_dim = dataset.action_dim
 
-
 #-----------------------------------------------------------------------------#
 #------------------------------ model & trainer ------------------------------#
 #-----------------------------------------------------------------------------#
+
+import torch
+device = torch.device('cpu')
+if torch.cuda.is_available():
+    device = torch.device('cuda')
+elif torch.backends.mps.is_available():
+    device = torch.device('mps')
 
 model_config = utils.Config(
     args.model,
@@ -52,7 +58,7 @@ model_config = utils.Config(
     cond_dim=observation_dim,
     dim_mults=args.dim_mults,
     attention=args.attention,
-    device=args.device,
+    device=device,
 )
 
 diffusion_config = utils.Config(
@@ -69,7 +75,7 @@ diffusion_config = utils.Config(
     action_weight=args.action_weight,
     loss_weights=args.loss_weights,
     loss_discount=args.loss_discount,
-    device=args.device,
+    device=device,
 )
 
 trainer_config = utils.Config(
@@ -98,7 +104,6 @@ diffusion = diffusion_config(model)
 
 trainer = trainer_config(diffusion, dataset, renderer)
 
-
 #-----------------------------------------------------------------------------#
 #------------------------ test forward & backward pass -----------------------#
 #-----------------------------------------------------------------------------#
@@ -111,14 +116,18 @@ loss, _ = diffusion.loss(*batch)
 loss.backward()
 print('✓')
 
-
+breakpoint()
 #-----------------------------------------------------------------------------#
 #--------------------------------- main loop ---------------------------------#
 #-----------------------------------------------------------------------------#
 
-n_epochs = int(args.n_train_steps // args.n_steps_per_epoch)
+n_epochs = int(args.n_train_steps // args.n_steps_per_epoch) 
 
 for i in range(n_epochs):
     print(f'Epoch {i} / {n_epochs} | {args.savepath}')
     trainer.train(n_train_steps=args.n_steps_per_epoch)
 
+'''
+Epoch 2 / 3 | logs/halfcheetah-medium-expert-v2/diffusion/defaults_H4_T20
+[ utils/training ] Saved model to logs/halfcheetah-medium-expert-v2/diffusion/defaults_H4_T20/state_0.pt
+'''

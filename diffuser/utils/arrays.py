@@ -4,7 +4,12 @@ import torch
 import pdb
 
 DTYPE = torch.float
-DEVICE = 'cuda:0'
+
+DEVICE = torch.device('cpu')
+if torch.cuda.is_available():
+    DEVICE = torch.device('cuda')
+elif torch.backends.mps.is_available():
+    DEVICE = torch.device('mps')
 
 #-----------------------------------------------------------------------------#
 #------------------------------ numpy <--> torch -----------------------------#
@@ -22,6 +27,7 @@ def to_torch(x, dtype=None, device=None):
 		return {k: to_torch(v, dtype, device) for k, v in x.items()}
 	elif torch.is_tensor(x):
 		return x.to(device).type(dtype)
+
 	return torch.tensor(x, dtype=dtype, device=device)
 
 def to_device(x, device=DEVICE):
@@ -72,7 +78,7 @@ def set_device(device):
 	if 'cuda' in device:
 		torch.set_default_tensor_type(torch.cuda.FloatTensor)
 
-def batch_to_device(batch, device='cuda:0'):
+def batch_to_device(batch, device=DEVICE):
     vals = [
         to_device(getattr(batch, field), device)
         for field in batch._fields
