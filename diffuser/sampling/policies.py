@@ -38,13 +38,16 @@ class GuidedPolicy:
         actions = self.normalizer.unnormalize(actions, 'actions')
 
         ## extract first action
-        action = actions[0, 0]
+        n_concecutive_actions = min(4, self.sample_kwargs['n_concecutive_actions'] 
+                                        if 'n_concecutive_actions' in self.sample_kwargs else 1)
+
+        actions = actions[0, :n_concecutive_actions]
 
         normed_observations = trajectories[:, :, self.action_dim:]
         observations = self.normalizer.unnormalize(normed_observations, 'observations')
 
         trajectories = Trajectories(actions, observations, samples.values)
-        return action, trajectories
+        return actions, trajectories
 
     @property
     def device(self):

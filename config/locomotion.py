@@ -117,6 +117,7 @@ base = {
         'method': 'ddpm', #change it to ddim if required
         'n_sampling_steps': 10, # 20 timesteps is what they use for ddpm... so cutting it by 10
         'gamma': 0.0,
+        'n_concecutive_actions': 1,
 
         ## sample_kwargs
         'n_guide_steps': 2,

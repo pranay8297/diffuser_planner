@@ -70,6 +70,7 @@ policy_config = utils.Config(
     t_stopgrad=args.t_stopgrad,
     scale_grad_by_std=args.scale_grad_by_std,
     n_sampling_steps = args.n_sampling_steps,
+    n_concecutive_actions = args.n_concecutive_actions, 
     verbose=False,
     method=args.method,
 )
@@ -89,6 +90,9 @@ observation = env.reset()
 rollout = [observation.copy()]
 
 total_reward = 0
+
+step = 0
+
 for t in range(args.max_episode_length):
 
     if t % 10 == 0: print(args.savepath, flush=True)
@@ -98,30 +102,38 @@ for t in range(args.max_episode_length):
 
     ## format current observation for conditioning
     conditions = {0: observation}
-    action, samples = policy(conditions, batch_size=args.batch_size, verbose=args.verbose)
+    actions, samples = policy(conditions, batch_size=args.batch_size, verbose=args.verbose)
 
     ## execute action in environment
-    next_observation, reward, terminal, _ = env.step(action)
+    # loop here for total number of n_concecutive steps and log instead of calling the function for every timestep
 
-    ## print reward and score
-    total_reward += reward
-    score = env.get_normalized_score(total_reward)
-    print(
-        f't: {t} | r: {reward:.2f} |  R: {total_reward:.2f} | score: {score:.4f} | '
-        f'values: {samples.values} | scale: {args.scale}',
-        flush=True,
-    )
+    for it in range(actions.shape[0]): # loop through total number of actions
+        
+        action = actions[it] # get the action at that step from horizon
 
-    ## update rollout observations
-    rollout.append(next_observation.copy())
+        next_observation, reward, terminal, _ = env.step(action)
 
-    ## render every `args.vis_freq` steps
-    logger.log(t, samples, state, rollout)
+        ## print reward and score
+        total_reward += reward
+        score = env.get_normalized_score(total_reward)
+        print(
+            f't: {step} | r: {reward:.2f} |  R: {total_reward:.2f} | score: {score:.4f} | ',
+            flush=True,
+        )
 
-    if terminal:
-        break
+        step += 1
 
-    observation = next_observation
+        ## update rollout observations
+        rollout.append(next_observation.copy())
+
+        ## render every `args.vis_freq` steps
+        # uncomment this after you figure out the error
+        # logger.log(t, samples, state, rollout)
+
+        if terminal:
+            break
+
+        observation = next_observation
 
 ## write results to json file at `args.savepath`
 logger.finish(t, score, total_reward, terminal, diffusion_experiment, value_experiment)
