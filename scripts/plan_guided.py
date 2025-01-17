@@ -88,6 +88,8 @@ observation = env.reset()
 
 ## observations for rendering
 rollout = [observation.copy()]
+ep_actions = []
+ep_states = []
 
 total_reward = 0
 
@@ -95,10 +97,10 @@ step = 0
 
 for t in range(args.max_episode_length):
 
-    if t % 10 == 0: print(args.savepath, flush=True)
+    # if t % 10 == 0: print(args.savepath, flush=True)
 
     ## save state for rendering only
-    state = env.state_vector().copy()
+    
 
     ## format current observation for conditioning
     conditions = {0: observation}
@@ -108,10 +110,16 @@ for t in range(args.max_episode_length):
     # loop here for total number of n_concecutive steps and log instead of calling the function for every timestep
 
     for it in range(actions.shape[0]): # loop through total number of actions
+
+        state = env.state_vector().copy()
         
         action = actions[it] # get the action at that step from horizon
+        
+        ep_actions.append(action)
 
         next_observation, reward, terminal, _ = env.step(action)
+
+        ep_states.append(env.state_vector().copy())
 
         ## print reward and score
         total_reward += reward
@@ -128,7 +136,7 @@ for t in range(args.max_episode_length):
 
         ## render every `args.vis_freq` steps
         # uncomment this after you figure out the error
-        # logger.log(t, samples, state, rollout)
+        # logger.log(step, samples, state, rollout)
 
         if terminal:
             break
@@ -136,4 +144,27 @@ for t in range(args.max_episode_length):
         observation = next_observation
 
 ## write results to json file at `args.savepath`
-logger.finish(t, score, total_reward, terminal, diffusion_experiment, value_experiment)
+
+def create_video_from_states(states, env, save_path = f'./logs/hf_cheetah_epl_{step}_ds_{args.n_sampling_steps}_maxR_{int(total_reward)}.mp4'):
+
+    from PIL import Image 
+    import cv2
+
+    frame_size = (500, 500)  # Adjust based on your rendering size
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(save_path, fourcc, 22.0, frame_size)
+
+    qpos_dim = env.sim.data.qpos.size
+    
+    for state in states:
+
+        env.set_state(state[:qpos_dim], state[qpos_dim:])
+        frame = env.render(mode='rgb_array')
+        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        out.write(frame)
+    
+    out.release()
+
+create_video_from_states(ep_states, env)
+
+logger.finish(step, score, total_reward, terminal, diffusion_experiment, value_experiment)
